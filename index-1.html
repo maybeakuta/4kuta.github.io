@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>4kuta.ru</title>
+<meta name="theme-color" content="#05070A">
+<style>
+  :root{
+    --bg: #05070A;
+    --accent: 255, 59, 48;
+    --fg: 245, 245, 244;
+    --fg-dim: 168, 168, 168;
+  }
+  html[data-theme="light"]{
+    --bg: #FAFAF8;
+    --accent: 232, 54, 43;
+    --fg: 20, 20, 18;
+    --fg-dim: 110, 110, 105;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+
+  html, body{
+    width:100%; height:100%;
+    overflow:hidden;
+    background: var(--bg);
+    transition: background-color 1.4s ease;
+  }
+
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  canvas{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+  }
+
+  #grid-canvas{ z-index:1; }
+  #torus-canvas{ z-index:2; }
+
+  .vignette{
+    position:fixed;
+    inset:0;
+    z-index:3;
+    pointer-events:none;
+    background:
+      radial-gradient(ellipse at 50% 50%, transparent 0%, transparent 35%, var(--bg) 92%),
+      linear-gradient(to bottom, var(--bg) 0%, transparent 12%, transparent 82%, var(--bg) 100%);
+    transition: background 1.4s ease;
+  }
+
+  main{
+    position:relative;
+    z-index:4;
+    text-align:center;
+    padding: 0 24px;
+    pointer-events:none;
+  }
+
+  .kicker{
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: clamp(10px, 1.4vw, 12px);
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: rgba(var(--accent), 0.85);
+    margin-bottom: clamp(18px, 3vw, 28px);
+    opacity: 0;
+    animation: rise 1.2s cubic-bezier(.16,1,.3,1) 0.15s forwards;
+  }
+
+  h1{
+    font-size: clamp(28px, 6vw, 58px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    color: rgb(var(--fg));
+    opacity: 0;
+    animation: rise 1.3s cubic-bezier(.16,1,.3,1) 0.35s forwards;
+  }
+
+  h1 .domain{
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-weight: 500;
+    background: linear-gradient(90deg, rgb(var(--fg)) 0%, rgba(var(--accent),1) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  p.sub{
+    margin-top: clamp(14px, 2.4vw, 20px);
+    font-size: clamp(14px, 1.8vw, 17px);
+    color: rgb(var(--fg-dim));
+    letter-spacing: 0.01em;
+    opacity: 0;
+    animation: rise 1.3s cubic-bezier(.16,1,.3,1) 0.55s forwards;
+  }
+
+  @keyframes rise{
+    from{ opacity:0; transform: translateY(14px); filter: blur(6px); }
+    to{ opacity:1; transform: translateY(0); filter: blur(0); }
+  }
+
+  .theme-toggle{
+    position:fixed;
+    bottom: max(22px, env(safe-area-inset-bottom));
+    right: 22px;
+    z-index: 5;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--fg), 0.14);
+    background: rgba(var(--fg), 0.03);
+    color: rgba(var(--fg-dim), 1);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    backdrop-filter: blur(6px);
+    transition: border-color .3s ease, background-color .3s ease, transform .2s ease;
+    opacity:0;
+    animation: rise 1s ease 1s forwards;
+  }
+  .theme-toggle:hover{
+    border-color: rgba(var(--accent), 0.5);
+    background: rgba(var(--accent), 0.08);
+    transform: scale(1.06);
+  }
+  .theme-toggle svg{ width:17px; height:17px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .kicker, h1, p.sub, .theme-toggle{
+      animation: none !important;
+      opacity: 1 !important;
+      transform:none !important;
+      filter:none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="grid-canvas"></canvas>
+<canvas id="torus-canvas"></canvas>
+<div class="vignette"></div>
+
+<main>
+  <div class="kicker"></div>
+  <h1>Добро пожаловать на <span class="domain">4kuta.ru</span></h1>
+  <p class="sub">Тут пока ничего нет</p>
+</main>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Переключить тему" title="Переключить тему">
+  <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></svg>
+</button>
+
+<script>
+function getSeason(date){
+  const y = date.getFullYear();
+  const marEquinox = new Date(y, 2, 20);
+  const junSolstice = new Date(y, 5, 21);
+  const sepEquinox = new Date(y, 8, 23);
+  const decSolstice = new Date(y, 11, 21);
+  if (date >= marEquinox && date < junSolstice) return 'spring';
+  if (date >= junSolstice && date < sepEquinox) return 'summer';
+  if (date >= sepEquinox && date < decSolstice) return 'autumn';
+  return 'winter';
+}
+
+const SEASON_WINDOWS = {
+  winter: { sunrise: 9,  sunset: 16.5 },
+  spring: { sunrise: 6.5,sunset: 19 },
+  summer: { sunrise: 5,  sunset: 21.5 },
+  autumn: { sunrise: 7,  sunset: 18.5 },
+};
+
+function computeTheme(date){
+  const season = getSeason(date);
+  const hour = date.getHours() + date.getMinutes()/60;
+  const { sunrise, sunset } = SEASON_WINDOWS[season];
+  const isDay = hour >= sunrise && hour < sunset;
+  return isDay ? 'light' : 'dark';
+}
+
+function applyTheme(theme, animate){
+  document.documentElement.setAttribute('data-theme', theme);
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  metaTheme.setAttribute('content', theme === 'light' ? '#FAFAF8' : '#05070A');
+  renderThemeIcon(theme);
+  window.__currentTheme = theme;
+}
+
+function renderThemeIcon(theme){
+  const icon = document.getElementById('themeIcon');
+  if(theme === 'light'){
+    icon.innerHTML = '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>';
+  } else {
+    icon.innerHTML = '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/>';
+  }
+}
+
+let userOverride = localStorage.getItem('4kuta_theme_override');
+let autoTheme = computeTheme(new Date());
+applyTheme(userOverride || autoTheme);
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const next = window.__currentTheme === 'light' ? 'dark' : 'light';
+  userOverride = next;
+  localStorage.setItem('4kuta_theme_override', next);
+  applyTheme(next);
+});
+
+setInterval(() => {
+  if(!localStorage.getItem('4kuta_theme_override')){
+    applyTheme(computeTheme(new Date()));
+  }
+}, 5 * 60 * 1000);
+
+const gridCanvas = document.getElementById('grid-canvas');
+const gctx = gridCanvas.getContext('2d');
+
+let W, H, DPR;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  [gridCanvas, torusCanvas].forEach(c => {
+    c.width = W * DPR;
+    c.height = H * DPR;
+  });
+  gctx.setTransform(DPR,0,0,DPR,0,0);
+  tctx.setTransform(DPR,0,0,DPR,0,0);
+}
+
+function getAccent(alpha){
+  const cssAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  return `rgba(${cssAccent}, ${alpha})`;
+}
+function getFg(alpha){
+  const cssFg = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim();
+  return `rgba(${cssFg}, ${alpha})`;
+}
+
+let gridT = 0;
+const GRID_SPACING = 90;
+const GRID_LINES = 14;
+const HORIZON_Y_RATIO = 0.56;
+
+function drawGrid(){
+  gctx.clearRect(0,0,W,H);
+  const horizonY = H * HORIZON_Y_RATIO;
+  const vanishX = W / 2;
+  const vanishY = horizonY;
+
+  const lineColor = getFg(0.10);
+  const lineColorNear = getFg(0.02);
+
+  gctx.lineWidth = 1;
+
+  const halfLines = 9;
+  for(let i = -halfLines; i <= halfLines; i++){
+    const xFar = vanishX + i * (GRID_SPACING * 0.32);
+    const xNear = vanishX + i * (GRID_SPACING * 5.2);
+    const grad = gctx.createLinearGradient(0, vanishY, 0, H);
+    grad.addColorStop(0, getFg(0));
+    grad.addColorStop(1, getFg(0.16));
+    gctx.strokeStyle = grad;
+    gctx.beginPath();
+    gctx.moveTo(xFar, vanishY);
+    gctx.lineTo(xNear, H + 40);
+    gctx.stroke();
+  }
+
+  const speed = 0.34;
+  const rows = 22;
+  for(let i = 0; i < rows; i++){
+    let z = ((i + gridT * speed) % rows) / rows;
+    let ease = Math.pow(z, 2.6);
+    const y = vanishY + ease * (H - vanishY + 60);
+    const spreadAtY = 0.32 + ease * (5.2 - 0.32);
+    const xLeft = vanishX - halfLines * GRID_SPACING * spreadAtY;
+    const xRight = vanishX + halfLines * GRID_SPACING * spreadAtY;
+    const alpha = 0.02 + (1 - z) * 0.16;
+
+    gctx.strokeStyle = getFg(Math.max(0.015, alpha));
+    gctx.beginPath();
+    gctx.moveTo(xLeft, y);
+    gctx.lineTo(xRight, y);
+    gctx.stroke();
+  }
+
+  gridT += 1;
+}
+
+const torusCanvas = document.getElementById('torus-canvas');
+const tctx = torusCanvas.getContext('2d');
+
+const PARTICLE_COUNT = 900;
+const R1 = 1.0;
+const R2 = 2.15;
+let particles = [];
+
+for(let i = 0; i < PARTICLE_COUNT; i++){
+  const u = Math.random() * Math.PI * 2;
+  const v = Math.random() * Math.PI * 2;
+  particles.push({ u, v, jitter: Math.random() });
+}
+
+let rotX = 0.4;
+let rotY = 0;
+let mouseInfluenceX = 0;
+let mouseInfluenceY = 0;
+
+window.addEventListener('mousemove', (e) => {
+  mouseInfluenceX = (e.clientX / window.innerWidth - 0.5) * 0.6;
+  mouseInfluenceY = (e.clientY / window.innerHeight - 0.5) * 0.6;
+});
+window.addEventListener('touchmove', (e) => {
+  if(e.touches[0]){
+    mouseInfluenceX = (e.touches[0].clientX / window.innerWidth - 0.5) * 0.6;
+    mouseInfluenceY = (e.touches[0].clientY / window.innerHeight - 0.5) * 0.6;
+  }
+}, { passive:true });
+
+function project(x, y, z, cx, cy, scale, fov){
+  const zp = z + fov;
+  const f = scale / zp;
+  return {
+    x: cx + x * f,
+    y: cy + y * f,
+    scale: f,
+    z: zp
+  };
+}
+
+function drawTorus(time){
+  tctx.clearRect(0,0,W,H);
+
+  rotY += 0.0032;
+  rotX = 0.42 + mouseInfluenceY * 0.5;
+  const targetRotZ = mouseInfluenceX * 0.4;
+
+  const cx = W / 2;
+  const cy = H / 2 - H * 0.03;
+  const baseScale = Math.min(W, H) * 0.155;
+  const fov = 6.2;
+
+  const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  const cosZ = Math.cos(targetRotZ), sinZ = Math.sin(targetRotZ);
+
+  const projected = [];
+
+  for(let i = 0; i < particles.length; i++){
+    const p = particles[i];
+    const u = p.u + time * 0.00015 * (0.5 + p.jitter * 0.5);
+    const v = p.v;
+
+    let x = (R2 + R1 * Math.cos(u)) * Math.cos(v);
+    let y = (R2 + R1 * Math.cos(u)) * Math.sin(v);
+    let z = R1 * Math.sin(u);
+
+    let x1 = x * cosY + z * sinY;
+    let z1 = -x * sinY + z * cosY;
+    let y1 = y * cosX - z1 * sinX;
+    let z2 = y * sinX + z1 * cosX;
+    let x2 = x1 * cosZ - y1 * sinZ;
+    let y2 = x1 * sinZ + y1 * cosZ;
+
+    const proj = project(x2, y2, z2, cx, cy, baseScale, fov);
+    proj.depth = z2;
+    proj.jitter = p.jitter;
+    projected.push(proj);
+  }
+
+  projected.sort((a,b) => a.depth - b.depth);
+
+  const accentAlphaBase = 0.9;
+
+  for(let i = 0; i < projected.length; i++){
+    const pr = projected[i];
+    const depthNorm = (pr.depth + R2 + R1) / (2 * (R2 + R1));
+    const size = Math.max(0.6, pr.scale * (0.9 + pr.jitter * 0.9));
+    const alpha = (0.18 + depthNorm * 0.82) * accentAlphaBase;
+
+    tctx.beginPath();
+    tctx.fillStyle = getAccent(alpha.toFixed(3));
+    tctx.arc(pr.x, pr.y, size, 0, Math.PI * 2);
+    tctx.fill();
+
+    if(depthNorm > 0.72){
+      tctx.beginPath();
+      tctx.fillStyle = getAccent((alpha * 0.18).toFixed(3));
+      tctx.arc(pr.x, pr.y, size * 3.2, 0, Math.PI * 2);
+      tctx.fill();
+    }
+  }
+}
+
+let rafId;
+function loop(time){
+  drawGrid();
+  drawTorus(time);
+  rafId = requestAnimationFrame(loop);
+}
+
+function handleVisibility(){
+  if(document.hidden){
+    cancelAnimationFrame(rafId);
+  } else {
+    rafId = requestAnimationFrame(loop);
+  }
+}
+
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+resize();
+window.addEventListener('resize', resize);
+document.addEventListener('visibilitychange', handleVisibility);
+
+if(reduceMotion){
+  drawGrid();
+  drawTorus(0);
+} else {
+  rafId = requestAnimationFrame(loop);
+}
+</script>
+
+</body>
+</html>
