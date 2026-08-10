@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>4kuta.ru</title>
+<meta name="theme-color" content="#05070A">
+<style>
+  :root{
+    --bg: #05070A;
+    --accent: 255, 59, 48;
+    --fg: 245, 245, 244;
+    --fg-dim: 168, 168, 168;
+  }
+  html[data-theme="light"]{
+    --bg: #FAFAF8;
+    --accent: 232, 54, 43;
+    --fg: 20, 20, 18;
+    --fg-dim: 110, 110, 105;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+
+  html, body{
+    width:100%; height:100%;
+    overflow:hidden;
+    background: var(--bg);
+    transition: background-color 1.4s ease;
+  }
+
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  canvas{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+  }
+
+  #grid-canvas{ z-index:1; }
+  #torus-canvas{ z-index:2; }
+
+  #head-wrap{
+    position:fixed;
+    left:0;
+    top:0;
+    z-index: 3.5;
+    pointer-events:none;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+    color: rgba(var(--accent), 0.92);
+  }
+  #head-wrap.ready{ opacity: 1; }
+
+  #head-bob{
+    width:100%;
+    height:100%;
+    animation: headBob 7s ease-in-out infinite;
+    filter: drop-shadow(0 0 24px rgba(var(--accent), 0.35));
+  }
+
+  #head-svg{
+    width:100%;
+    height:100%;
+    overflow:visible;
+    display:block;
+  }
+
+  @keyframes headBob{
+    0%   { transform: translateY(0); }
+    50%  { transform: translateY(10px); }
+    100% { transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #head-wrap{ animation: none !important; }
+    #head-bob{ animation: none !important; }
+  }
+
+  .vignette{
+    position:fixed;
+    inset:0;
+    z-index:3;
+    pointer-events:none;
+    background:
+      radial-gradient(ellipse at 50% 50%, transparent 0%, transparent 35%, var(--bg) 92%),
+      linear-gradient(to bottom, var(--bg) 0%, transparent 12%, transparent 82%, var(--bg) 100%);
+    transition: background 1.4s ease;
+  }
+
+  main{
+    position:relative;
+    z-index:4;
+    text-align:center;
+    padding: 0 24px;
+    pointer-events:none;
+  }
+
+  .kicker{
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: clamp(10px, 1.4vw, 12px);
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: rgba(var(--accent), 0.85);
+    margin-bottom: clamp(18px, 3vw, 28px);
+    opacity: 0;
+    animation: rise 1.2s cubic-bezier(.16,1,.3,1) 0.15s forwards;
+  }
+
+  h1{
+    font-size: clamp(28px, 6vw, 58px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    color: rgb(var(--fg));
+    opacity: 0;
+    animation: rise 1.3s cubic-bezier(.16,1,.3,1) 0.35s forwards;
+  }
+
+  h1 .domain{
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-weight: 500;
+    background: linear-gradient(90deg, rgb(var(--fg)) 0%, rgba(var(--accent),1) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  p.sub{
+    margin-top: clamp(14px, 2.4vw, 20px);
+    font-size: clamp(14px, 1.8vw, 17px);
+    color: rgb(var(--fg-dim));
+    letter-spacing: 0.01em;
+    opacity: 0;
+    animation: rise 1.3s cubic-bezier(.16,1,.3,1) 0.55s forwards;
+  }
+
+  @keyframes rise{
+    from{ opacity:0; transform: translateY(14px); filter: blur(6px); }
+    to{ opacity:1; transform: translateY(0); filter: blur(0); }
+  }
+
+  .theme-toggle{
+    position:fixed;
+    bottom: max(22px, env(safe-area-inset-bottom));
+    right: 22px;
+    z-index: 5;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--fg), 0.14);
+    background: rgba(var(--fg), 0.03);
+    color: rgba(var(--fg-dim), 1);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    backdrop-filter: blur(6px);
+    transition: border-color .3s ease, background-color .3s ease, transform .2s ease;
+    opacity:0;
+    animation: rise 1s ease 1s forwards;
+  }
+  .theme-toggle:hover{
+    border-color: rgba(var(--accent), 0.5);
+    background: rgba(var(--accent), 0.08);
+    transform: scale(1.06);
+  }
+  .theme-toggle svg{ width:17px; height:17px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .kicker, h1, p.sub, .theme-toggle{
+      animation: none !important;
+      opacity: 1 !important;
+      transform:none !important;
+      filter:none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="grid-canvas"></canvas>
+<canvas id="torus-canvas"></canvas>
+<div id="head-wrap"><div id="head-bob">
+  <svg id="head-svg" viewBox="0 0 2048 2048" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(0.000000,2048.000000) scale(0.100000,-0.100000)"
+fill="currentColor" stroke="none">
+<path d="M5520 17028 c-19 -20 -40 -63 -55 -113 -44 -142 -57 -159 -202 -270
+-72 -55 -212 -177 -310 -270 -98 -94 -194 -181 -213 -195 -19 -13 -53 -42 -75
+-64 -71 -72 -273 -249 -353 -309 -42 -32 -162 -141 -267 -244 -453 -444 -531
+-514 -755 -683 -25 -19 -66 -53 -91 -75 -26 -23 -84 -66 -130 -97 -89 -60
+-221 -170 -304 -253 -159 -160 -363 -453 -430 -620 -19 -46 -95 -280 -124
+-382 -19 -65 -82 -356 -131 -603 -33 -168 -53 -411 -47 -565 12 -265 53 -539
+108 -718 44 -142 136 -323 215 -419 36 -44 75 -96 88 -116 32 -50 253 -265
+296 -287 41 -21 210 -46 254 -38 17 3 54 20 81 38 137 87 481 418 702 674 21
+24 72 69 113 99 41 31 96 73 121 94 51 41 115 82 313 195 125 72 268 135 379
+167 41 12 289 58 427 80 45 7 382 -52 428 -76 24 -12 69 -47 101 -77 46 -45
+63 -71 89 -137 17 -45 35 -105 41 -135 5 -30 21 -124 36 -209 73 -430 121
+-597 235 -829 17 -36 47 -103 67 -150 19 -47 39 -90 43 -96 20 -26 131 -280
+153 -352 20 -62 27 -107 29 -190 l3 -108 -40 -74 c-57 -107 -98 -142 -254
+-220 -127 -63 -183 -92 -371 -194 -73 -39 -274 -164 -470 -292 -177 -115 -379
+-212 -575 -277 -110 -36 -387 -114 -435 -123 -80 -14 -261 -59 -335 -82 -150
+-48 -231 -98 -277 -174 -26 -42 -42 -169 -34 -277 4 -53 11 -254 16 -447 9
+-332 31 -691 49 -800 17 -98 53 -220 101 -339 26 -67 60 -161 75 -211 14 -49
+31 -106 37 -125 26 -85 91 -219 157 -323 76 -122 86 -130 286 -237 33 -18 94
+-55 135 -83 41 -28 111 -68 155 -90 123 -60 253 -160 451 -347 55 -52 118
+-104 140 -115 21 -11 63 -35 92 -54 64 -41 198 -75 255 -65 52 8 72 44 88 153
+15 112 6 312 -20 406 -71 261 -124 423 -193 595 -30 74 -58 155 -61 180 -3 25
+-11 77 -16 117 -24 170 -10 246 84 451 34 73 133 219 177 259 12 12 68 39 123
+61 84 33 134 45 308 72 289 44 389 48 558 21 75 -11 173 -29 218 -40 74 -18
+89 -26 159 -85 154 -129 391 -379 478 -503 287 -409 325 -483 364 -708 31
+-180 6 -420 -70 -681 -18 -60 -41 -140 -52 -178 -49 -177 -61 -352 -32 -492
+18 -89 20 -93 83 -189 80 -124 121 -234 201 -538 36 -140 75 -257 139 -424 52
+-139 92 -284 137 -498 69 -335 185 -514 419 -644 33 -19 92 -55 130 -81 39
+-25 125 -77 191 -114 67 -37 151 -87 185 -112 99 -69 275 -150 391 -180 120
+-30 282 -42 345 -25 45 12 125 82 155 136 16 30 16 32 -24 120 -22 50 -81 173
+-130 274 -229 470 -253 532 -325 826 -22 88 -4 207 43 291 44 80 62 86 171 65
+98 -19 130 -41 173 -118 18 -32 49 -78 70 -103 20 -25 51 -67 70 -94 56 -83
+113 -136 146 -136 57 0 107 38 147 111 21 37 70 103 110 147 58 63 89 111 161
+248 123 234 157 304 201 417 21 54 51 124 68 155 58 111 65 128 111 264 47
+141 84 221 196 433 82 155 107 191 173 248 30 26 72 73 93 104 67 102 103 145
+136 162 46 23 71 65 109 183 28 88 63 168 74 168 9 0 25 -139 26 -221 0 -86
+-10 -153 -39 -264 -6 -22 -16 -78 -22 -125 -6 -47 -22 -134 -36 -193 -14 -60
+-34 -168 -45 -240 -18 -118 -41 -210 -85 -345 -25 -78 -63 -304 -79 -481 -8
+-95 -20 -192 -25 -215 -5 -22 -16 -88 -25 -146 -18 -113 -58 -285 -79 -334
+-22 -52 -75 -247 -90 -331 -35 -185 -66 -315 -95 -392 -17 -46 -45 -120 -62
+-165 -17 -46 -40 -127 -51 -182 -19 -92 -19 -101 -4 -140 21 -54 87 -103 169
+-127 52 -15 230 17 393 70 230 75 268 96 420 223 143 120 170 177 308 643 24
+83 56 218 71 300 40 221 57 282 237 835 74 228 78 245 87 365 12 153 -4 446
+-31 569 -24 116 -21 238 12 416 10 58 23 134 28 170 11 70 86 354 128 485 35
+105 101 243 158 328 25 37 46 72 46 77 0 5 6 13 13 17 7 4 24 22 37 39 28 35
+215 259 263 316 18 20 38 37 45 38 6 0 12 4 12 10 0 5 11 12 24 16 13 3 28 16
+34 29 6 13 20 26 31 30 12 3 21 10 21 15 0 10 52 40 70 40 25 0 6 -30 -34 -54
+-69 -40 -66 -51 4 -16 91 46 248 75 320 58 310 -71 415 -102 552 -167 75 -36
+165 -128 256 -262 57 -84 71 -119 107 -259 60 -237 82 -442 79 -725 -4 -325 8
+-488 45 -605 59 -186 123 -338 149 -354 4 -2 38 8 76 24 70 27 101 54 133 115
+23 43 133 182 184 233 24 24 104 84 177 134 73 50 146 105 161 122 16 17 54
+59 84 93 95 105 141 224 212 543 20 91 45 190 55 220 117 360 166 718 140
+1025 -5 66 -15 206 -20 310 -17 300 -36 364 -140 466 -78 76 -147 112 -395
+209 -351 137 -597 248 -655 296 -14 12 -63 47 -110 79 -47 32 -114 79 -149
+104 -162 117 -235 170 -303 217 -40 29 -116 87 -169 130 -91 75 -197 147 -300
+205 -91 51 -225 158 -246 196 -33 60 -65 171 -65 222 0 101 37 351 77 511 18
+74 45 191 60 259 14 68 40 159 56 203 26 72 29 90 29 208 0 167 -13 256 -57
+388 -39 119 -55 154 -113 243 -22 34 -40 70 -40 79 0 24 52 101 88 132 52 43
+154 67 402 93 212 22 338 10 485 -45 61 -23 152 -57 204 -76 146 -54 220 -102
+334 -220 98 -101 212 -189 423 -327 206 -133 202 -130 339 -307 44 -57 112
+-142 151 -189 38 -47 95 -120 126 -161 52 -71 60 -77 122 -99 59 -21 78 -23
+149 -17 l82 6 72 73 c40 39 91 104 114 142 23 39 47 77 54 85 7 8 18 33 25 55
+7 22 35 86 62 142 27 56 61 146 75 200 27 97 27 100 27 448 1 506 -27 728
+-118 965 -25 63 -70 185 -101 270 -32 85 -76 196 -100 245 -23 50 -49 110 -58
+135 -35 103 -62 161 -127 270 -37 63 -86 155 -109 203 -50 109 -270 444 -354
+541 -35 39 -79 96 -100 126 -51 77 -443 473 -534 539 -18 14 -53 52 -78 86
+-44 60 -258 268 -357 348 -25 20 -63 61 -84 89 -21 29 -64 82 -95 118 -31 36
+-81 99 -112 141 -30 42 -66 87 -80 100 -13 13 -46 56 -72 94 -58 83 -87 121
+-180 229 -39 44 -86 101 -105 126 -19 25 -70 82 -112 127 -42 45 -94 108 -116
+140 -22 32 -66 81 -98 108 -31 27 -79 83 -106 125 -27 41 -65 91 -84 111 -19
+20 -49 56 -67 81 -96 136 -230 279 -290 309 -50 26 -89 21 -179 -21 l-65 -30
+-61 -129 c-34 -71 -62 -132 -62 -135 0 -3 -20 -50 -44 -103 -35 -78 -51 -135
+-79 -278 -19 -99 -38 -211 -42 -250 -20 -213 -49 -393 -85 -525 -44 -163 -50
+-195 -85 -440 -30 -213 -31 -259 -4 -346 29 -94 53 -138 86 -159 55 -36 156
+-141 174 -180 39 -87 148 -551 210 -890 18 -100 12 -224 -14 -314 -27 -90 -62
+-135 -158 -206 l-46 -34 -124 9 c-68 5 -148 16 -177 25 -39 12 -67 14 -109 8
+-53 -7 -59 -11 -91 -56 -37 -51 -37 -53 -33 -217 3 -117 -16 -226 -69 -401
+-22 -74 -52 -172 -66 -219 -37 -121 -186 -417 -273 -540 -38 -54 -103 -120
+-133 -136 -92 -48 -195 -76 -313 -83 -100 -7 -129 -12 -172 -34 l-51 -26 9
+-39 c5 -22 13 -50 18 -64 5 -13 12 -51 16 -84 4 -32 14 -71 21 -86 16 -30 19
+-98 5 -98 -5 0 -27 18 -49 41 -31 33 -44 40 -61 34 -21 -6 -22 -11 -16 -71 8
+-69 -7 -199 -31 -273 -10 -31 -12 -47 -4 -55 19 -19 11 -71 -15 -94 -25 -22
+-34 -62 -14 -62 7 0 32 21 57 48 46 49 47 52 96 252 9 36 21 76 27 90 10 24
+11 24 25 5 8 -10 14 -28 14 -39 0 -10 11 -38 24 -60 13 -23 26 -57 30 -77 4
+-21 13 -42 21 -49 8 -7 22 -35 30 -63 8 -28 21 -60 28 -71 8 -12 24 -52 37
+-91 12 -38 36 -96 52 -128 18 -37 33 -86 38 -130 10 -84 43 -240 59 -280 6
+-16 11 -63 11 -106 l0 -77 -44 -47 c-24 -25 -57 -67 -72 -94 -15 -26 -34 -59
+-43 -73 -21 -34 -59 -142 -76 -218 -8 -34 -22 -73 -31 -87 -21 -32 -21 -137 1
+-200 9 -28 20 -82 24 -120 5 -39 15 -84 23 -100 9 -17 19 -50 23 -75 4 -25 13
+-56 20 -70 31 -61 28 -89 -24 -232 -28 -76 -51 -146 -51 -157 0 -10 -11 -52
+-24 -92 -23 -72 -34 -99 -62 -166 -8 -17 -14 -39 -14 -50 0 -10 -5 -25 -10
+-33 -13 -21 -5 396 9 447 6 22 25 58 42 79 44 55 59 88 59 127 0 36 -31 189
+-55 272 -7 28 -19 87 -24 132 -6 47 -20 101 -32 125 -18 36 -23 65 -27 171 -4
+119 -3 131 16 157 12 15 24 41 28 56 4 16 33 82 65 147 83 171 88 252 17 273
+-39 13 -72 3 -87 -24 -5 -10 -15 -54 -20 -98 -6 -43 -22 -119 -36 -169 -14
+-49 -25 -107 -25 -128 0 -53 -33 -140 -70 -187 -25 -32 -33 -53 -37 -99 -6
+-58 -6 -59 -33 -51 -15 4 -56 29 -91 55 -82 61 -148 91 -225 104 -71 11 -123
+35 -182 84 -92 77 -197 87 -417 41 -189 -39 -218 -41 -256 -13 -17 12 -37 36
+-45 54 -20 48 -1 159 48 274 32 77 42 115 48 191 9 101 40 226 66 265 8 13 36
+31 61 39 26 9 55 23 65 33 26 23 23 74 -8 139 -14 31 -24 58 -21 60 3 3 18 -1
+34 -9 15 -8 51 -18 78 -21 l50 -6 -55 18 c-131 45 -208 93 -246 154 -13 21
+-31 38 -39 38 -8 0 -15 5 -15 11 0 5 5 7 11 4 6 -4 -2 17 -17 46 -32 64 -64
+170 -65 219 l-1 35 -8 -30 c-7 -29 -8 -29 -9 10 -7 206 -25 306 -76 412 -34
+73 -99 148 -145 169 -14 7 -108 31 -210 54 -112 26 -213 55 -257 75 -113 52
+-268 160 -326 228 -29 34 -73 83 -98 111 -48 54 -189 243 -226 304 -29 47 -88
+236 -103 327 -7 39 -18 122 -25 185 -7 63 -13 101 -14 84 0 -17 -8 -51 -17
+-75 -8 -24 -21 -86 -29 -138 -8 -51 -24 -112 -35 -135 l-20 -42 30 -56 c24
+-44 30 -67 29 -110 -1 -33 5 -66 15 -86 9 -17 16 -45 16 -62 l0 -30 -42 42
+c-34 34 -46 56 -64 122 -13 45 -24 104 -24 132 0 28 -7 93 -16 145 -32 183 -4
+432 63 575 l17 34 33 -32 c31 -30 33 -31 33 -9 0 65 -102 209 -169 237 -65 28
+-182 45 -371 54 -407 21 -592 75 -734 215 -94 92 -140 234 -156 480 -28 425
+-50 637 -75 721 -13 45 -131 213 -174 249 -26 21 -168 82 -346 147 l-110 40
+-185 5 c-193 5 -185 6 -411 -46 -214 -50 -231 -51 -661 -41 -380 9 -505 18
+-518 39 -3 5 -24 17 -48 26 -49 20 -55 46 -21 89 19 24 20 31 10 73 -13 51 -9
+59 69 127 62 55 97 96 125 149 16 29 62 94 104 145 154 190 259 344 302 442
+60 140 127 278 149 309 10 15 49 81 85 147 37 65 86 139 110 164 52 54 75 101
+110 235 49 182 36 259 -55 319 l-41 27 -29 -33z m-247 -518 c-3 -11 -9 -20
+-13 -20 -5 0 -22 -14 -39 -31 -30 -30 -31 -30 -31 -7 0 30 10 44 38 52 12 4
+22 12 22 17 0 5 6 9 14 9 9 0 12 -7 9 -20z m-253 -251 c0 -11 -4 -18 -10 -14
+-5 3 -7 12 -3 20 7 21 13 19 13 -6z m-90 -94 c0 -8 -7 -15 -15 -15 -9 0 -24
+-13 -33 -30 -9 -16 -23 -30 -29 -30 -7 0 -13 -7 -13 -15 0 -9 -9 -15 -25 -15
+-32 0 -32 8 0 20 14 5 30 21 35 35 5 14 16 25 25 25 8 0 15 6 15 14 0 13 13
+23 33 25 4 1 7 -6 7 -14z m8930 -1761 c47 -15 114 -40 150 -57 70 -32 75 -34
+136 -71 23 -14 64 -31 90 -38 48 -12 84 -33 84 -50 0 -13 -104 -9 -146 6 -26
+9 -65 12 -116 8 -56 -3 -78 -1 -78 7 0 15 -61 41 -94 41 -16 0 -34 11 -50 33
+-14 17 -52 52 -85 77 -44 34 -57 48 -49 57 16 20 66 16 158 -13z m728 -255
+c70 -25 134 -68 130 -88 -7 -38 -133 -14 -253 48 -21 12 -51 21 -65 21 -27 0
+-70 25 -70 41 0 16 200 -1 258 -22z m-538 -29 c40 -28 94 -67 119 -88 25 -20
+59 -46 77 -57 76 -48 113 -76 127 -95 8 -11 47 -36 87 -56 85 -41 200 -139
+200 -170 0 -11 11 -31 25 -44 20 -18 25 -33 25 -69 0 -25 -3 -56 -6 -68 -10
+-37 -59 -30 -124 18 -30 22 -68 47 -85 57 -30 17 -177 159 -270 262 -28 30
+-80 83 -115 117 -36 34 -83 83 -105 109 -21 26 -54 56 -72 67 -39 22 -42 40
+-10 55 37 18 49 14 127 -38z m986 -40 c47 -11 95 -27 106 -35 21 -14 21 -14
+-3 -19 -69 -14 -118 -15 -161 -2 -93 29 -132 76 -63 76 19 0 73 -9 121 -20z
+m-2392 -1689 c19 -20 33 -50 42 -93 21 -91 29 -306 15 -413 -7 -49 -16 -132
+-22 -183 -7 -71 -18 -111 -42 -160 l-32 -67 -7 70 c-9 78 -3 129 17 162 31 48
+14 375 -24 476 -21 55 -7 237 19 237 3 0 19 -13 34 -29z m553 -598 c-2 -21 -4
+-6 -4 32 0 39 2 55 4 38 2 -18 2 -50 0 -70z m-1110 -1525 c-3 -7 -5 -2 -5 12
+0 14 2 19 5 13 2 -7 2 -19 0 -25z m308 -429 c19 -27 35 -52 35 -57 0 -4 11
+-23 23 -42 31 -46 79 -192 75 -227 -4 -36 -39 -49 -94 -34 -48 13 -57 28 -43
+71 13 35 4 82 -42 229 -42 134 -24 157 46 60z m-2905 -232 c11 -77 57 -200 97
+-260 16 -24 41 -77 57 -118 16 -41 37 -94 46 -119 25 -61 32 -109 22 -144 -18
+-66 -54 -36 -93 79 -17 50 -41 113 -53 140 -13 28 -31 71 -41 98 -9 26 -33 71
+-53 100 -48 69 -53 129 -21 227 12 38 24 68 26 66 2 -2 8 -33 13 -69z m3090
+-540 c0 -7 -6 -21 -12 -30 -17 -22 -117 -65 -171 -73 -23 -4 -53 -12 -67 -19
+-74 -38 -159 -75 -170 -75 -7 0 -28 -9 -46 -21 -21 -13 -39 -17 -48 -12 -13 7
+-11 14 11 41 25 33 93 82 113 82 6 0 61 20 123 44 62 24 132 51 157 60 57 19
+110 21 110 3z m-4009 -134 c58 -29 84 -49 107 -83 80 -115 141 -292 127 -367
+-9 -49 -88 -128 -137 -137 -20 -4 -49 -4 -65 -1 -40 9 -135 46 -153 60 -24 18
+-137 85 -144 85 -12 0 -91 54 -123 84 -31 28 -33 34 -33 101 0 124 54 199 195
+274 76 41 121 38 226 -16z m2219 -136 c31 -12 69 -32 84 -45 16 -12 32 -22 35
+-22 17 0 115 -106 133 -143 11 -23 35 -69 53 -102 19 -33 34 -65 35 -71 0 -20
+-30 -25 -37 -6 -4 9 -15 28 -25 41 -10 13 -18 32 -18 41 0 19 -41 70 -118 145
+-23 24 -75 59 -115 79 -47 23 -78 46 -90 65 -29 50 -20 52 63 18z m-3113 -43
+c-3 -3 -12 -4 -19 -1 -8 3 -5 6 6 6 11 1 17 -2 13 -5z m4688 -86 c49 -57 71
+-102 84 -170 12 -69 7 -261 -9 -304 -14 -38 -120 -117 -204 -151 l-58 -24 -54
+26 c-103 50 -193 163 -194 240 0 56 28 136 72 203 64 99 113 149 182 181 115
+55 132 55 181 -1z m-4509 -44 c85 -81 164 -144 180 -144 7 0 23 -9 34 -20 l20
+-20 -29 0 c-50 0 -128 50 -217 137 -78 78 -97 112 -55 98 10 -3 40 -26 67 -51z
+m2544 -14 c0 -11 -6 -20 -14 -20 -8 0 -29 -27 -46 -59 -36 -67 -80 -91 -80
+-44 0 15 70 93 84 93 4 0 17 11 28 25 24 30 28 31 28 5z m2820 -180 c0 -25
+-243 -268 -288 -287 -25 -10 -159 -43 -178 -43 -2 0 -4 9 -4 20 0 11 6 20 13
+20 32 0 139 64 202 122 39 35 88 75 111 90 23 14 59 42 80 62 44 40 64 45 64
+16z m-5035 -10 c26 -6 22 -8 -23 -9 -33 -1 -51 3 -47 9 7 11 26 11 70 0z
+m2984 -257 c-1 -121 -4 -154 -9 -118 -15 93 -10 285 6 285 2 0 3 -75 3 -167z
+m-4789 86 c0 -33 -15 -51 -72 -82 -26 -14 -76 -47 -111 -73 -36 -26 -139 -86
+-230 -133 -105 -55 -202 -114 -267 -163 -55 -43 -104 -78 -108 -78 -5 0 -39
+-19 -77 -43 -73 -44 -148 -77 -178 -77 -29 0 -20 43 16 73 142 120 234 184
+330 232 59 29 127 69 150 87 23 19 92 61 152 93 61 32 139 76 175 99 109 68
+204 113 212 101 4 -5 8 -22 8 -36z m2302 7 c144 -19 181 -44 197 -132 12 -63
+-2 -86 -66 -110 -77 -28 -210 -122 -306 -216 -49 -48 -93 -86 -97 -83 -4 2
+-10 -27 -12 -66 -8 -105 -42 -112 -69 -14 -6 22 -17 47 -24 55 -7 8 -18 33
+-24 55 -7 26 -34 64 -76 110 -60 65 -78 95 -56 95 17 0 131 -61 131 -69 0 -5
+18 -26 40 -47 28 -27 40 -47 41 -69 1 -27 2 -26 10 10 18 88 13 108 -43 173
+-154 176 -152 242 6 299 74 27 191 29 348 9z m3993 -235 c17 -5 64 -22 105
+-36 93 -32 125 -54 116 -82 -10 -33 -67 -98 -116 -136 -162 -123 -293 -115
+-405 25 -27 34 -65 78 -82 97 -24 24 -33 44 -33 67 0 36 -3 34 100 58 36 8 74
+17 85 20 32 8 197 -1 230 -13z m1253 -183 c-3 -7 -14 -14 -27 -16 -12 -2 -31
+-17 -43 -33 -12 -16 -27 -29 -33 -29 -7 0 -20 -9 -30 -20 -10 -11 -35 -23 -56
+-26 -21 -4 -46 -15 -55 -25 -11 -12 -30 -19 -53 -19 l-36 1 24 19 c13 11 29
+20 36 20 8 0 21 8 31 18 22 22 74 54 149 91 64 32 99 39 93 19z m-668 -8 c0
+-5 -11 -10 -25 -10 -14 0 -25 5 -25 10 0 6 11 10 25 10 14 0 25 -4 25 -10z
+m-96 -45 c-4 -8 -13 -15 -21 -15 -8 0 -17 -9 -20 -20 -3 -10 -31 -38 -62 -62
+-31 -24 -96 -75 -146 -114 -49 -39 -100 -75 -112 -78 -21 -7 -23 -4 -23 25 0
+27 10 43 57 86 31 29 76 62 100 74 23 11 59 32 80 46 21 14 59 32 85 40 26 7
+48 18 48 23 0 6 4 10 10 10 5 0 7 -7 4 -15z m-4014 -44 c14 -27 13 -76 -3 -90
+-20 -16 -44 7 -51 51 -5 29 -3 39 11 47 25 15 31 14 43 -8z m4424 -90 c3 -5
+-7 -13 -22 -19 -30 -12 -84 -25 -64 -16 6 3 12 12 12 19 0 22 62 35 74 16z
+m-97 -58 c3 -8 -11 -15 -36 -19 -23 -4 -41 -10 -41 -13 0 -4 -18 -17 -40 -30
+-22 -12 -40 -26 -40 -31 0 -4 -21 -18 -47 -30 -25 -12 -55 -32 -65 -45 -10
+-13 -40 -39 -68 -59 -40 -29 -50 -33 -50 -18 1 25 28 53 80 84 25 14 55 38 68
+53 13 14 39 33 58 41 19 8 34 19 34 24 0 6 6 10 13 10 7 0 32 11 57 25 47 26
+71 28 77 8z m-5048 -69 c28 -35 28 -90 1 -99 -11 -3 -24 -4 -30 0 -23 14 -24
+125 -1 125 5 0 19 -12 30 -26z m636 -38 c-4 -23 -16 -59 -26 -80 -35 -68 -40
+-188 -41 -871 l0 -660 26 -50 c23 -43 26 -59 24 -125 -3 -71 -4 -74 -16 -45
+-20 46 -61 226 -82 365 -6 41 -15 98 -20 125 -23 130 -21 323 9 880 21 370 33
+443 85 502 29 34 49 13 41 -41z m5358 -14 c21 -15 70 -49 109 -77 40 -27 94
+-72 120 -99 121 -121 0 -92 -182 45 -77 57 -91 76 -106 134 -8 33 10 32 59 -3z
+m-5947 -197 c7 -19 14 -46 14 -61 0 -14 8 -38 19 -52 22 -32 56 -148 71 -247
+6 -38 17 -95 25 -125 8 -30 19 -112 25 -182 5 -69 15 -139 21 -155 18 -47 31
+-256 20 -324 -17 -101 -29 -96 -42 18 -10 76 -19 127 -40 206 -5 21 -13 88
+-18 150 -6 62 -17 129 -25 149 -9 20 -20 93 -25 161 -7 85 -15 136 -27 159
+-12 23 -18 58 -19 115 -1 45 -7 88 -12 95 -18 22 -24 56 -17 93 3 19 8 35 11
+35 2 0 11 -16 19 -35z m5337 -605 c7 0 6 -4 -3 -10 -19 -12 -70 -13 -70 -1 0
+11 30 20 48 15 8 -2 19 -4 25 -4z m-107 -45 c-10 -8 -23 -12 -28 -9 -14 9 2
+24 25 24 21 -1 21 -1 3 -15z m-1339 -387 c-2 -13 -4 -5 -4 17 -1 22 1 32 4 23
+2 -10 2 -28 0 -40z m-27 -156 c0 -30 -8 -45 -20 -37 -9 6 0 65 11 65 5 0 9
+-13 9 -28z m-69 -205 c-8 -8 -11 1 -11 29 0 53 14 67 18 19 2 -21 -1 -42 -7
+-48z m-3562 1 l-1 -63 -10 47 c-9 44 -6 78 7 78 3 0 4 -28 4 -62z m61 -243 c4
+-61 13 -112 23 -131 12 -22 19 -71 23 -176 7 -141 2 -198 -15 -198 -12 0 -18
+38 -32 205 -7 88 -17 159 -25 172 -15 25 -31 251 -19 280 14 34 38 -46 45
+-152z m3423 -56 c6 -21 2 -87 -9 -158 -9 -56 -24 -16 -24 64 0 74 7 115 20
+115 4 0 10 -10 13 -21z m-3112 -257 c-11 -19 -24 168 -14 193 5 13 10 -15 15
+-79 4 -55 3 -106 -1 -114z m3065 -113 c-4 -44 -14 -95 -21 -112 -13 -30 -14
+-24 -15 81 0 108 1 112 21 112 21 0 21 -3 15 -81z m-47 -284 c1 -98 -8 -157
+-23 -152 -13 4 -13 85 -1 197 10 93 23 69 24 -45z m-59 -323 c0 -26 -3 -72 -7
+-102 -5 -45 -8 -50 -14 -30 -16 56 -7 196 12 184 5 -3 9 -26 9 -52z m-2120
+-2758 c0 -8 -4 -14 -10 -14 -5 0 -10 9 -10 21 0 11 5 17 10 14 6 -3 10 -13 10
+-21z"/>
+<path d="M11365 10774 c-3 -22 -8 -48 -10 -59 -2 -11 0 -26 4 -34 5 -8 11 12
+16 54 7 72 0 101 -10 39z"/>
+<path d="M10625 9956 c53 -16 121 -18 170 -6 22 6 10 8 -46 9 -42 0 -98 3
+-125 6 l-49 5 50 -14z"/>
+</g>
+  </svg>
+</div></div>
+<div class="vignette"></div>
+
+<main>
+  <div class="kicker"></div>
+  <h1>Добро пожаловать на <span class="domain">4kuta.ru</span></h1>
+  <p class="sub">Тут пока ничего нет</p>
+</main>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Переключить тему" title="Переключить тему">
+  <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></svg>
+</button>
+
+<script>
+function getSeason(date){
+  const y = date.getFullYear();
+  const marEquinox = new Date(y, 2, 20);
+  const junSolstice = new Date(y, 5, 21);
+  const sepEquinox = new Date(y, 8, 23);
+  const decSolstice = new Date(y, 11, 21);
+  if (date >= marEquinox && date < junSolstice) return 'spring';
+  if (date >= junSolstice && date < sepEquinox) return 'summer';
+  if (date >= sepEquinox && date < decSolstice) return 'autumn';
+  return 'winter';
+}
+
+const SEASON_WINDOWS = {
+  winter: { sunrise: 9,  sunset: 16.5 },
+  spring: { sunrise: 6.5,sunset: 19 },
+  summer: { sunrise: 5,  sunset: 21.5 },
+  autumn: { sunrise: 7,  sunset: 18.5 },
+};
+
+function computeTheme(date){
+  const season = getSeason(date);
+  const hour = date.getHours() + date.getMinutes()/60;
+  const { sunrise, sunset } = SEASON_WINDOWS[season];
+  const isDay = hour >= sunrise && hour < sunset;
+  return isDay ? 'light' : 'dark';
+}
+
+function applyTheme(theme, animate){
+  document.documentElement.setAttribute('data-theme', theme);
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  metaTheme.setAttribute('content', theme === 'light' ? '#FAFAF8' : '#05070A');
+  renderThemeIcon(theme);
+  window.__currentTheme = theme;
+}
+
+function renderThemeIcon(theme){
+  const icon = document.getElementById('themeIcon');
+  if(theme === 'light'){
+    icon.innerHTML = '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>';
+  } else {
+    icon.innerHTML = '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/>';
+  }
+}
+
+let userOverride = localStorage.getItem('4kuta_theme_override');
+let autoTheme = computeTheme(new Date());
+applyTheme(userOverride || autoTheme);
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const next = window.__currentTheme === 'light' ? 'dark' : 'light';
+  userOverride = next;
+  localStorage.setItem('4kuta_theme_override', next);
+  applyTheme(next);
+});
+
+setInterval(() => {
+  if(!localStorage.getItem('4kuta_theme_override')){
+    applyTheme(computeTheme(new Date()));
+  }
+}, 5 * 60 * 1000);
+
+const gridCanvas = document.getElementById('grid-canvas');
+const gctx = gridCanvas.getContext('2d');
+
+let W, H, DPR;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  [gridCanvas, torusCanvas].forEach(c => {
+    c.width = W * DPR;
+    c.height = H * DPR;
+  });
+  gctx.setTransform(DPR,0,0,DPR,0,0);
+  tctx.setTransform(DPR,0,0,DPR,0,0);
+}
+
+function getAccent(alpha){
+  const cssAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  return `rgba(${cssAccent}, ${alpha})`;
+}
+function getFg(alpha){
+  const cssFg = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim();
+  return `rgba(${cssFg}, ${alpha})`;
+}
+
+let gridT = 0;
+const GRID_SPACING = 90;
+const GRID_LINES = 14;
+const HORIZON_Y_RATIO = 0.56;
+
+function drawGrid(){
+  gctx.clearRect(0,0,W,H);
+  const horizonY = H * HORIZON_Y_RATIO;
+  const vanishX = W / 2;
+  const vanishY = horizonY;
+
+  const lineColor = getFg(0.10);
+  const lineColorNear = getFg(0.02);
+
+  gctx.lineWidth = 1;
+
+  const halfLines = 9;
+  for(let i = -halfLines; i <= halfLines; i++){
+    const xFar = vanishX + i * (GRID_SPACING * 0.32);
+    const xNear = vanishX + i * (GRID_SPACING * 5.2);
+    const grad = gctx.createLinearGradient(0, vanishY, 0, H);
+    grad.addColorStop(0, getFg(0));
+    grad.addColorStop(1, getFg(0.16));
+    gctx.strokeStyle = grad;
+    gctx.beginPath();
+    gctx.moveTo(xFar, vanishY);
+    gctx.lineTo(xNear, H + 40);
+    gctx.stroke();
+  }
+
+  const speed = 0.34;
+  const rows = 22;
+  for(let i = 0; i < rows; i++){
+    let z = ((i + gridT * speed) % rows) / rows;
+    let ease = Math.pow(z, 2.6);
+    const y = vanishY + ease * (H - vanishY + 60);
+    const spreadAtY = 0.32 + ease * (5.2 - 0.32);
+    const xLeft = vanishX - halfLines * GRID_SPACING * spreadAtY;
+    const xRight = vanishX + halfLines * GRID_SPACING * spreadAtY;
+    const alpha = 0.02 + (1 - z) * 0.16;
+
+    gctx.strokeStyle = getFg(Math.max(0.015, alpha));
+    gctx.beginPath();
+    gctx.moveTo(xLeft, y);
+    gctx.lineTo(xRight, y);
+    gctx.stroke();
+  }
+
+  gridT += 1;
+}
+
+const torusCanvas = document.getElementById('torus-canvas');
+const tctx = torusCanvas.getContext('2d');
+
+const PARTICLE_COUNT = 900;
+const R1 = 1.0;
+const R2 = 2.15;
+let particles = [];
+
+for(let i = 0; i < PARTICLE_COUNT; i++){
+  const u = Math.random() * Math.PI * 2;
+  const v = Math.random() * Math.PI * 2;
+  particles.push({ u, v, jitter: Math.random() });
+}
+
+let rotX = 0.4;
+let rotY = 0;
+let mouseInfluenceX = 0;
+let mouseInfluenceY = 0;
+
+window.addEventListener('mousemove', (e) => {
+  mouseInfluenceX = (e.clientX / window.innerWidth - 0.5) * 0.6;
+  mouseInfluenceY = (e.clientY / window.innerHeight - 0.5) * 0.6;
+});
+window.addEventListener('touchmove', (e) => {
+  if(e.touches[0]){
+    mouseInfluenceX = (e.touches[0].clientX / window.innerWidth - 0.5) * 0.6;
+    mouseInfluenceY = (e.touches[0].clientY / window.innerHeight - 0.5) * 0.6;
+  }
+}, { passive:true });
+
+function project(x, y, z, cx, cy, scale, fov){
+  const zp = z + fov;
+  const f = scale / zp;
+  return {
+    x: cx + x * f,
+    y: cy + y * f,
+    scale: f,
+    z: zp
+  };
+}
+
+const headWrap = document.getElementById('head-wrap');
+const TORUS_TOP_OFFSET_FRAC = 0.0909;
+const TORUS_HALF_HEIGHT_FRAC = 0.0789;
+
+function positionHead(cx, cy, baseScale){
+  const m = Math.min(W, H);
+  const torusTopY = cy - m * TORUS_TOP_OFFSET_FRAC;
+  const torusVisualHeight = m * TORUS_HALF_HEIGHT_FRAC * 2;
+
+  const headWidth = torusVisualHeight * 10.5;
+  const headHeight = headWidth; // viewBox квадратный 2048x2048
+
+  const svgTopY = torusTopY - headHeight * 0.20;
+
+  headWrap.style.width = headWidth + 'px';
+  headWrap.style.height = headHeight + 'px';
+  headWrap.style.transform = `translate(calc(${cx}px - 50%), ${svgTopY}px)`;
+}
+
+function drawTorus(time){
+  tctx.clearRect(0,0,W,H);
+
+  rotY += 0.0032;
+  rotX = 0.42 + mouseInfluenceY * 0.5;
+  const targetRotZ = mouseInfluenceX * 0.4;
+
+  const cx = W / 2;
+  const cy = H / 2 - H * 0.03;
+  const baseScale = Math.min(W, H) * 0.155;
+  const fov = 6.2;
+
+  positionHead(cx, cy, baseScale);
+
+  const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  const cosZ = Math.cos(targetRotZ), sinZ = Math.sin(targetRotZ);
+
+  const projected = [];
+
+  for(let i = 0; i < particles.length; i++){
+    const p = particles[i];
+    const u = p.u + time * 0.00015 * (0.5 + p.jitter * 0.5);
+    const v = p.v;
+
+    let x = (R2 + R1 * Math.cos(u)) * Math.cos(v);
+    let y = (R2 + R1 * Math.cos(u)) * Math.sin(v);
+    let z = R1 * Math.sin(u);
+
+    let x1 = x * cosY + z * sinY;
+    let z1 = -x * sinY + z * cosY;
+    let y1 = y * cosX - z1 * sinX;
+    let z2 = y * sinX + z1 * cosX;
+    let x2 = x1 * cosZ - y1 * sinZ;
+    let y2 = x1 * sinZ + y1 * cosZ;
+
+    const proj = project(x2, y2, z2, cx, cy, baseScale, fov);
+    proj.depth = z2;
+    proj.jitter = p.jitter;
+    projected.push(proj);
+  }
+
+  projected.sort((a,b) => a.depth - b.depth);
+
+  const accentAlphaBase = 0.9;
+
+  for(let i = 0; i < projected.length; i++){
+    const pr = projected[i];
+    const depthNorm = (pr.depth + R2 + R1) / (2 * (R2 + R1));
+    const size = Math.max(0.6, pr.scale * (0.9 + pr.jitter * 0.9));
+    const alpha = (0.18 + depthNorm * 0.82) * accentAlphaBase;
+
+    tctx.beginPath();
+    tctx.fillStyle = getAccent(alpha.toFixed(3));
+    tctx.arc(pr.x, pr.y, size, 0, Math.PI * 2);
+    tctx.fill();
+
+    if(depthNorm > 0.72){
+      tctx.beginPath();
+      tctx.fillStyle = getAccent((alpha * 0.18).toFixed(3));
+      tctx.arc(pr.x, pr.y, size * 3.2, 0, Math.PI * 2);
+      tctx.fill();
+    }
+  }
+}
+
+let rafId;
+function loop(time){
+  drawGrid();
+  drawTorus(time);
+  rafId = requestAnimationFrame(loop);
+}
+
+function handleVisibility(){
+  if(document.hidden){
+    cancelAnimationFrame(rafId);
+  } else {
+    rafId = requestAnimationFrame(loop);
+  }
+}
+
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+resize();
+positionHead(W/2, H/2 - H*0.03, Math.min(W,H)*0.155);
+window.addEventListener('resize', resize);
+document.addEventListener('visibilitychange', handleVisibility);
+
+if(reduceMotion){
+  drawGrid();
+  drawTorus(0);
+} else {
+  rafId = requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(() => {
+  setTimeout(() => {
+    headWrap.classList.add('ready');
+  }, 300);
+});
+</script>
+
+</body>
+</html>
